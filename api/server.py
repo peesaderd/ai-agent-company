@@ -1,5 +1,6 @@
 """FastAPI server for CEO Agent."""
 
+import os
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -13,8 +14,16 @@ agent: CEOAgent | None = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Auto-configure from env vars on startup
+    global agent
+    api_key = os.environ.get("DEEPSEEK_API_KEY")
+    if api_key:
+        agent = CEOAgent(
+            api_key=api_key,
+            model=os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash"),
+            base_url=os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
+        )
     yield
-    # Cleanup if needed
 
 
 app = FastAPI(title="AI Agent Company API", lifespan=lifespan)
@@ -30,7 +39,7 @@ app.add_middleware(
 
 
 class ConfigRequest(BaseModel):
-    api_key: str
+    api_key: str | None = None
     model: str = "deepseek-v4-flash"
     base_url: str = "https://api.deepseek.com"
     system_prompt: str | None = None
@@ -63,8 +72,14 @@ def health():
 @app.post("/config")
 def config(req: ConfigRequest):
     global agent
+    api_key = req.api_key or os.environ.get("DEEPSEEK_API_KEY")
+    if not api_key:
+        raise HTTPException(
+            status_code=400,
+            detail="API key required. Provide in request body or set DEEPSEEK_API_KEY env var.",
+        )
     agent = CEOAgent(
-        api_key=req.api_key,
+        api_key=api_key,
         model=req.model,
         base_url=req.base_url,
         system_prompt=req.system_prompt,
