@@ -16,13 +16,23 @@ agent: CEOAgent | None = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global agent
-    api_key = os.environ.get("DEEPSEEK_API_KEY")
-    if api_key:
+    llm_backend = os.environ.get("LLM_BACKEND", "deepseek")
+
+    if llm_backend == "ollama":
         agent = CEOAgent(
-            api_key=api_key,
-            model=os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash"),
-            base_url=os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
+            llm_backend="ollama",
+            ollama_model=os.environ.get("OLLAMA_MODEL", "qwen2.5:7b"),
+            ollama_base_url=os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434"),
         )
+    else:
+        api_key = os.environ.get("DEEPSEEK_API_KEY")
+        if api_key:
+            agent = CEOAgent(
+                api_key=api_key,
+                model=os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash"),
+                base_url=os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
+                llm_backend="deepseek",
+            )
     yield
 
 
@@ -43,6 +53,9 @@ class ConfigRequest(BaseModel):
     model: str = "deepseek-v4-flash"
     base_url: str = "https://api.deepseek.com"
     system_prompt: str | None = None
+    llm_backend: str = "deepseek"
+    ollama_model: str = "qwen2.5:7b"
+    ollama_base_url: str = "http://localhost:11434"
 
 
 class ChatRequest(BaseModel):
@@ -238,6 +251,15 @@ def health():
 @app.post("/config")
 def config(req: ConfigRequest):
     global agent
+    if req.llm_backend == "ollama":
+        agent = CEOAgent(
+            llm_backend="ollama",
+            ollama_model=req.ollama_model,
+            ollama_base_url=req.ollama_base_url,
+            system_prompt=req.system_prompt,
+        )
+        return {"status": "ok", "message": f"CEO Agent configured with Ollama ({req.ollama_model})"}
+    
     api_key = req.api_key or os.environ.get("DEEPSEEK_API_KEY")
     if not api_key:
         raise HTTPException(
@@ -249,6 +271,7 @@ def config(req: ConfigRequest):
         model=req.model,
         base_url=req.base_url,
         system_prompt=req.system_prompt,
+        llm_backend="deepseek",
     )
     return {"status": "ok", "message": "CEO Agent configured successfully"}
 
