@@ -99,8 +99,15 @@ class OllamaLLM:
                 import logging
                 logging.basicConfig(level=logging.ERROR)
                 logger = logging.getLogger(__name__)
-                logger.error(f"Ollama API error {resp.status_code}: {resp.text[:500]}")
-                logger.error(f"Request payload (truncated): {json.dumps(payload, ensure_ascii=False)[:500]}")
+                payload_str = json.dumps(payload, ensure_ascii=False)
+                logger.error(f"Ollama API error {resp.status_code}: {resp.text[:1000]}")
+                logger.error(f"Request payload (len={len(payload_str)}): {payload_str[:2000]}")
+                # Log each message role and content length
+                for i, m in enumerate(messages):
+                    role = m.get("role", "?")
+                    content_len = len(m.get("content", ""))
+                    has_tc = "tool_calls" in m
+                    logger.error(f"  msg[{i}]: role={role}, content_len={content_len}, has_tool_calls={has_tc}")
             resp.raise_for_status()
             return resp.json()
 
