@@ -93,7 +93,7 @@ class OllamaLLM:
             "options": {"temperature": 0.7},
         }
 
-        with httpx.Client(timeout=180) as client:
+        with httpx.Client(timeout=300) as client:
             resp = client.post(f"{self.base_url}/api/chat", json=payload)
             if resp.status_code != 200:
                 import logging
@@ -503,7 +503,11 @@ class CEOAgent:
             tool_fn = TOOL_MAP.get(tc["name"])
             if tool_fn:
                 result = tool_fn.invoke(tc["args"])
-                tool_messages.append(ToolMessage(content=str(result), tool_call_id=tc["id"]))
+                content = str(result)
+                # Truncate long tool results to avoid slow processing on CPU-only Ollama
+                if len(content) > 800:
+                    content = content[:800] + "\n\n[เนื้อหาถูกตัดเนื่องจากยาวเกินไป...]"
+                tool_messages.append(ToolMessage(content=content, tool_call_id=tc["id"]))
 
         return {"messages": tool_messages}
 
