@@ -145,43 +145,77 @@ class OllamaLLM:
         import re
         tool_calls = []
 
-        # Pattern 1: ```json ... ``` block with tool call
-        # Pattern 2: <tool_call> ... </tool_call> block
-        # Pattern 3: Inline JSON like {"name": "search", "arguments": {...}}
+        # Strategy 1: Try to parse the entire text as JSON (model sometimes outputs only JSON)
+        try:
+            tc_data = json.loads(text.strip())
+            name = tc_data.get("name", "")
+            args = tc_data.get("arguments", {})
+            if name and args:
+                return [{
+                    "id": f"call_{hash(text)}",
+                    "type": "function",
+                    "function": {
+                        "name": name,
+                        "arguments": json.dumps(args) if isinstance(args, dict) else str(args),
+                    },
+                }]
+        except (json.JSONDecodeError, KeyError, ValueError):
+            pass
 
-        patterns = [
-            r'```json\s*(\{.*?"name"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:\s*\{.*?\})\s*```',
-            r'<tool_call>\s*(\{.*?\})\s*</tool_call>',
-            r'(\{["\']name["\']\s*:\s*["\'][^"\']+["\']\s*,\s*["\']arguments["\']\s*:\s*\{.*?\})',
-        ]
+        # Strategy 2: Find ```json ... ``` blocks
+        json_blocks = re.findall(r'```json\s*(\{.*?\})\s*```', text, re.DOTALL)
+        for block in json_blocks:
+            try:
+                tc_data = json.loads(block)
+                name = tc_data.get("name", "")
+                args = tc_data.get("arguments", {})
+                if name and args:
+                    tool_calls.append({
+                        "id": f"call_{hash(block)}",
+                        "type": "function",
+                        "function": {
+                            "name": name,
+                            "arguments": json.dumps(args) if isinstance(args, dict) else str(args),
+                        },
+                    })
+            except (json.JSONDecodeError, KeyError):
+                continue
 
-        for pattern in patterns:
-            matches = re.findall(pattern, text, re.DOTALL)
-            for match in matches:
-                try:
-                    tc_data = json.loads(match)
-                    name = tc_data.get("name", "")
-                    args = tc_data.get("arguments", {})
-                    if name and args:
-                        tool_calls.append({
-                            "id": f"call_{hash(match)}",
-                            "type": "function",
-                            "function": {
-                                "name": name,
-                                "arguments": json.dumps(args) if isinstance(args, dict) else str(args),
-                            },
-                        })
-                except (json.JSONDecodeError, KeyError):
-                    continue
+        if tool_calls:
+            return tool_calls
+
+        # Strategy 3: Find <tool_call> ... </tool_call> blocks
+        tool_blocks = re.findall(r'<tool_call>\s*(\{.*?\})\s*</tool_call>', text, re.DOTALL)
+        for block in tool_blocks:
+            try:
+                tc_data = json.loads(block)
+                name = tc_data.get("name", "")
+                args = tc_data.get("arguments", {})
+                if name and args:
+                    tool_calls.append({
+                        "id": f"call_{hash(block)}",
+                        "type": "function",
+                        "function": {
+                            "name": name,
+                            "arguments": json.dumps(args) if isinstance(args, dict) else str(args),
+                        },
+                    })
+            except (json.JSONDecodeError, KeyError):
+                continue
 
         return tool_calls
 
     def _strip_tool_calls_from_text(self, text: str) -> str:
         """Remove tool call JSON blocks from text content."""
         import re
-        # Remove ```json ... ``` blocks (match from ```json to closing ```)
-        text = re.sub(r'```json\s*\{.*?\}\s*```', '', text, flags=re.DOTALL)
-        # Also try without requiring braces (catch malformed blocks)
+        # If the entire text is a JSON tool call (Strategy 1 case), return empty
+        try:
+            tc_data = json.loads(text.strip())
+            if tc_data.get("name") and tc_data.get("arguments"):
+                return ""
+        except (json.JSONDecodeError, ValueError):
+            pass
+        # Remove ```json ... ``` blocks
         text = re.sub(r'```json[\s\S]*?```', '', text)
         # Remove <tool_call> ... </tool_call> blocks
         text = re.sub(r'<tool_call>.*?</tool_call>', '', text, flags=re.DOTALL)
