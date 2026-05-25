@@ -441,20 +441,37 @@ class CEOAgent:
             elif isinstance(m, AIMessage):
                 msg = {"role": "assistant", "content": m.content or ""}
                 if m.tool_calls:
-                    msg["tool_calls"] = [
-                        {
-                            "id": tc["id"],
-                            "type": "function",
-                            "function": {
-                                "name": tc["name"],
-                                "arguments": json.dumps(tc["args"]) if isinstance(tc["args"], dict) else tc["args"],
-                            },
-                        }
-                        for tc in m.tool_calls
-                    ]
+                    if self.llm_backend == "ollama":
+                        # Ollama-native format: no id/type, arguments as object
+                        msg["tool_calls"] = [
+                            {
+                                "function": {
+                                    "name": tc["name"],
+                                    "arguments": tc["args"] if isinstance(tc["args"], dict) else json.loads(tc["args"]),
+                                },
+                            }
+                            for tc in m.tool_calls
+                        ]
+                    else:
+                        # OpenAI-style format
+                        msg["tool_calls"] = [
+                            {
+                                "id": tc["id"],
+                                "type": "function",
+                                "function": {
+                                    "name": tc["name"],
+                                    "arguments": json.dumps(tc["args"]) if isinstance(tc["args"], dict) else tc["args"],
+                                },
+                            }
+                            for tc in m.tool_calls
+                        ]
                 msgs.append(msg)
             elif isinstance(m, ToolMessage):
-                msgs.append({"role": "tool", "content": m.content, "tool_call_id": m.tool_call_id})
+                if self.llm_backend == "ollama":
+                    # Ollama doesn't use tool_call_id
+                    msgs.append({"role": "tool", "content": m.content})
+                else:
+                    msgs.append({"role": "tool", "content": m.content, "tool_call_id": m.tool_call_id})
 
         # Call LLM
         # For Ollama, don't pass tools parameter (uses prompt-based tool calling)
