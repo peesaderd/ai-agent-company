@@ -86,8 +86,14 @@ class OllamaLLM:
         if tools:
             payload["tools"] = tools
 
-        with httpx.Client(timeout=120) as client:
+        with httpx.Client(timeout=180) as client:
             resp = client.post(f"{self.base_url}/api/chat", json=payload)
+            if resp.status_code != 200:
+                import logging
+                logging.basicConfig(level=logging.ERROR)
+                logger = logging.getLogger(__name__)
+                logger.error(f"Ollama API error {resp.status_code}: {resp.text[:500]}")
+                logger.error(f"Request payload (truncated): {json.dumps(payload, ensure_ascii=False)[:500]}")
             resp.raise_for_status()
             return resp.json()
 
