@@ -69,22 +69,29 @@ class AgentState(TypedDict):
 
 
 class OllamaLLM:
-    """Call Ollama API (local LLM)."""
+    """Call Ollama API (local LLM).
+
+    Uses prompt-based tool calling instead of structured tools parameter,
+    because qwen2.5:7b is unreliable with Ollama's built-in tool calling.
+    """
 
     def __init__(self, model: str = "qwen2.5:7b", base_url: str = "http://localhost:11434"):
         self.model = model
         self.base_url = base_url.rstrip("/")
 
     def chat(self, messages: list[dict], tools: list[dict] = None) -> dict:
-        """Call Ollama chat API."""
+        """Call Ollama chat API.
+
+        For Ollama, we do NOT pass the tools parameter because qwen2.5:7b
+        is inconsistent with structured tool calling. Instead, tool instructions
+        are embedded in the system prompt, and we parse tool calls from text.
+        """
         payload = {
             "model": self.model,
             "messages": messages,
             "stream": False,
             "options": {"temperature": 0.7},
         }
-        if tools:
-            payload["tools"] = tools
 
         with httpx.Client(timeout=180) as client:
             resp = client.post(f"{self.base_url}/api/chat", json=payload)
@@ -98,10 +105,16 @@ class OllamaLLM:
             return resp.json()
 
     def parse_response(self, data: dict) -> tuple[str, list[dict]]:
-        """Extract content and tool_calls from Ollama response."""
+        """Extract content and tool_calls from Ollama response.
+
+        Handles two cases:
+        1. Structured tool_calls from Ollama (when it works)
+        2. Tool calls embedded in text content (prompt-based, more reliable)
+        """
         msg = data.get("message", {})
         content = msg.get("content", "") or ""
 
+        # Case 1: Check for structured tool_calls from Ollama
         tool_calls = []
         for tc in msg.get("tool_calls", []):
             fn = tc.get("function", {})
@@ -114,7 +127,67 @@ class OllamaLLM:
                 },
             })
 
-        return content, tool_calls
+        if tool_calls:
+            return content, tool_calls
+
+        # Case 2: Parse tool calls from text content (prompt-based)
+        # Look for JSON block with tool call info
+        text_tool_calls = self._parse_tool_calls_from_text(content)
+        if text_tool_calls:
+            # Remove the tool call JSON from the content
+            content = self._strip_tool_calls_from_text(content)
+            return content, text_tool_calls
+
+        return content, []
+
+    def _parse_tool_calls_from_text(self, text: str) -> list[dict]:
+        """Parse tool calls embedded in text content."""
+        import re
+        tool_calls = []
+
+        # Pattern 1: ```json ... ``` block with tool call
+        # Pattern 2: <tool_call> ... </tool_call> block
+        # Pattern 3: Inline JSON like {"name": "search", "arguments": {...}}
+
+        patterns = [
+            r'```json\s*(\{.*?"name"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:\s*\{.*?\})\s*```',
+            r'<tool_call>\s*(\{.*?\})\s*</tool_call>',
+            r'(\{["\']name["\']\s*:\s*["\'][^"\']+["\']\s*,\s*["\']arguments["\']\s*:\s*\{.*?\})',
+        ]
+
+        for pattern in patterns:
+            matches = re.findall(pattern, text, re.DOTALL)
+            for match in matches:
+                try:
+                    tc_data = json.loads(match)
+                    name = tc_data.get("name", "")
+                    args = tc_data.get("arguments", {})
+                    if name and args:
+                        tool_calls.append({
+                            "id": f"call_{hash(match)}",
+                            "type": "function",
+                            "function": {
+                                "name": name,
+                                "arguments": json.dumps(args) if isinstance(args, dict) else str(args),
+                            },
+                        })
+                except (json.JSONDecodeError, KeyError):
+                    continue
+
+        return tool_calls
+
+    def _strip_tool_calls_from_text(self, text: str) -> str:
+        """Remove tool call JSON blocks from text content."""
+        import re
+        # Remove ```json ... ``` blocks (match from ```json to closing ```)
+        text = re.sub(r'```json\s*\{.*?\}\s*```', '', text, flags=re.DOTALL)
+        # Also try without requiring braces (catch malformed blocks)
+        text = re.sub(r'```json[\s\S]*?```', '', text)
+        # Remove <tool_call> ... </tool_call> blocks
+        text = re.sub(r'<tool_call>.*?</tool_call>', '', text, flags=re.DOTALL)
+        # Clean up extra whitespace
+        text = re.sub(r'\n{3,}', '\n\n', text).strip()
+        return text
 
 
 class DeepseekLLM:
@@ -177,16 +250,44 @@ DEFAULT_SYSTEM_PROMPT = """คุณคือ CEO ของ AI Agent Company เ
 - Data Agent: วิเคราะห์ข้อมูลและแนวโน้ม
 
 คุณสามารถใช้ tools ต่างๆ เพื่อทำงานได้โดยตรง:
-- search: ค้นหาข้อมูลจากเว็บ
-- fetch: ดึงเนื้อหาจาก URL
-- research_topic: ค้นคว้าหัวข้อแบบละเอียด
+- search: ค้นหาข้อมูลจากเว็บ (ใช้ query และ max_results)
+- fetch: ดึงเนื้อหาจาก URL (ใช้ url และ max_length)
+- research_topic: ค้นคว้าหัวข้อแบบละเอียด (ใช้ topic)
 
 วิธีการทำงาน:
 1. รับคำสั่งจาก Human (กรรมการ)
 2. คิดและวางแผน (monologue) ว่าจะทำอะไร
-3. ใช้ tools ที่จำเป็น
+3. ถ้าต้องใช้ tool ให้แสดงเป็น JSON ในรูปแบบนี้:
+   ```json
+   {"name": "search", "arguments": {"query": "คำค้นหา", "max_results": 5}}
+   ```
 4. สรุปและรายงานกลับ Human
 
+ตอบเป็นภาษาไทย เว้นแต่ Human จะขอเป็นภาษาอื่น"""
+
+OLLAMA_SYSTEM_PROMPT = """คุณคือ CEO ของ AI Agent Company เป็นผู้บริหารสูงสุดที่คอยดูแลองค์กร
+
+คุณมีลูกน้องที่เป็น AI Agents ที่คอยทำงานต่างๆ ให้:
+- Research Agent: ค้นคว้าและรวบรวมข้อมูล
+- Content Agent: สร้างและสรุปเนื้อหา
+- Data Agent: วิเคราะห์ข้อมูลและแนวโน้ม
+
+คุณสามารถใช้ tools ต่างๆ เพื่อทำงานได้โดยตรง:
+- search(query, max_results): ค้นหาข้อมูลจากเว็บ
+- fetch(url, max_length): ดึงเนื้อหาจาก URL
+- research_topic(topic): ค้นคว้าหัวข้อแบบละเอียด
+
+วิธีการทำงาน:
+1. รับคำสั่งจาก Human (กรรมการ)
+2. คิดและวางแผน (monologue) ว่าจะทำอะไร
+3. ถ้าต้องการใช้ tool ให้พิมพ์ JSON ในรูปแบบนี้:
+   ```json
+   {"name": "search", "arguments": {"query": "คำค้นหา", "max_results": 5}}
+   ```
+   แล้วฉันจะจัดการเรียก tool ให้เอง
+4. สรุปและรายงานกลับ Human
+
+สำคัญมาก: ถ้าต้องการใช้ tool ให้ใส่ JSON ใน ```json ... ``` block เท่านั้น
 ตอบเป็นภาษาไทย เว้นแต่ Human จะขอเป็นภาษาอื่น"""
 
 TOOL_SCHEMA = [
@@ -288,7 +389,11 @@ class CEOAgent:
 
     def _call_agent(self, state: AgentState):
         # Convert LangChain messages to API format
-        msgs = [{"role": "system", "content": self.system_prompt}]
+        system_prompt = self.system_prompt
+        if self.llm_backend == "ollama":
+            system_prompt = OLLAMA_SYSTEM_PROMPT
+
+        msgs = [{"role": "system", "content": system_prompt}]
         for m in state["messages"]:
             if isinstance(m, HumanMessage):
                 msgs.append({"role": "user", "content": m.content})
@@ -311,7 +416,9 @@ class CEOAgent:
                 msgs.append({"role": "tool", "content": m.content, "tool_call_id": m.tool_call_id})
 
         # Call LLM
-        data = self.llm.chat(msgs, tools=TOOL_SCHEMA)
+        # For Ollama, don't pass tools parameter (uses prompt-based tool calling)
+        tools_arg = None if self.llm_backend == "ollama" else TOOL_SCHEMA
+        data = self.llm.chat(msgs, tools=tools_arg)
         content, tool_calls = self.llm.parse_response(data)
 
         ai_msg = AIMessage(content=content)
