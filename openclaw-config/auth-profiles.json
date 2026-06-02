@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "profiles": {
+    "opencode:default": {
+      "type": "api_key",
+      "provider": "opencode-go",
+      "key": "sk-LTP2Z9x9adJjxgzUfcWjoQS9lxekHw5xMhKUs5NkCCULT9jhCryWgCFOPdwfngi0"
+    },
+    "opencode-go:default": {
+      "type": "api_key",
+      "provider": "opencode-go",
+      "key": "sk-LTP2Z9x9adJjxgzUfcWjoQS9lxekHw5xMhKUs5NkCCULT9jhCryWgCFOPdwfngi0"
+    }
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "agents": {
+    "defaults": {
+      "workspace": "/home/openhands/.openclaw/workspace",
+      "model": {
+        "primary": "opencode-go/deepseek-v4-flash"
+      },
+      "models": {
+        "opencode-go/deepseek-v4-flash": {}
+      }
+    }
+  },
+  "gateway": {
+    "mode": "local",
+    "port": 18789,
+    "controlUi": {
+      "allowedOrigins": [
+        "http://localhost:18789",
+        "http://127.0.0.1:18789",
+        "https://claw.m2igen.com",
+        "http://localhost:53152",
+        "http://localhost:57150"
+      ],
+      "allowInsecureAuth": true
+    }
+  },
+  "meta": {
+    "lastTouchedVersion": "2026.5.28",
+    "lastTouchedAt": "2026-06-02T00:47:50.633Z"
+  },
+  "auth": {
+    "profiles": {
+      "openai:manual": {
+        "provider": "openai",
+        "mode": "api_key"
+      }
+    }
+  },
+  "models": {
+    "providers": {
+      "opencode-go": {
+        "models": [
+          {
+            "id": "deepseek-v4-flash",
+            "name": "deepseek-v4-flash"
+          }
+        ]
+      }
+    }
+  }
+}

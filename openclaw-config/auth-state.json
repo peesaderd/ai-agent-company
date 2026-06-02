@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "lastGood": {
+    "opencode-go": "opencode:default"
+  },
+  "usageStats": {
+    "opencode:default": {
+      "lastUsed": 1780384394167,
+      "errorCount": 0
+    }
+  }
+}
