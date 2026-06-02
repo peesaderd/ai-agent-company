@@ -6,7 +6,8 @@
         "primary": "opencode-go/deepseek-v4-flash"
       },
       "models": {
-        "opencode-go/deepseek-v4-flash": {}
+        "opencode-go/deepseek-v4-flash": {},
+        "mistral/mistral-large-latest": {}
       }
     }
   },
@@ -45,6 +46,62 @@
             "name": "deepseek-v4-flash"
           }
         ]
+      },
+      "mistral": {
+        "baseUrl": "https://api.mistral.ai/v1",
+        "apiKey": "6sifzrZW9g1mEeijbUFMUVdl4KoIVScg",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "mistral-large-latest",
+            "name": "Mistral Large",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0
+            },
+            "contextWindow": 131072,
+            "maxTokens": 32768
+          },
+          {
+            "id": "mistral-small-latest",
+            "name": "Mistral Small",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0
+            },
+            "contextWindow": 131072,
+            "maxTokens": 32768
+          }
+        ]
+      }
+    }
+  },
+  "env": {
+    "MISTRAL_API_KEY": "6sifzrZW9g1mEeijbUFMUVdl4KoIVScg"
+  },
+  "talk": {
+    "provider": "mistral",
+    "providers": {
+      "mistral": {
+        "apiKey": "6sifzrZW9g1mEeijbUFMUVdl4KoIVScg",
+        "baseUrl": "https://api.mistral.ai/v1"
+      }
+    },
+    "realtime": {
+      "provider": "mistral",
+      "providers": {
+        "mistral": {
+          "apiKey": "6sifzrZW9g1mEeijbUFMUVdl4KoIVScg",
+          "baseUrl": "https://api.mistral.ai/v1"
+        }
       }
     }
   }
