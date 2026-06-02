@@ -3,11 +3,11 @@
     "defaults": {
       "workspace": "/home/openhands/.openclaw/workspace",
       "model": {
-        "primary": "opencode-go/deepseek-v4-flash"
+        "primary": "mistral/open-mistral-nemo"
       },
       "models": {
         "opencode-go/deepseek-v4-flash": {},
-        "mistral/mistral-large-latest": {}
+        "mistral/open-mistral-nemo": {}
       }
     }
   },
@@ -79,6 +79,20 @@
             },
             "contextWindow": 131072,
             "maxTokens": 32768
+          },
+          {
+            "id": "open-mistral-nemo",
+            "name": "Mistral Nemo (Fast)",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0
+            },
+            "contextWindow": 131072,
+            "maxTokens": 32768
           }
         ]
       }
@@ -86,23 +100,5 @@
   },
   "env": {
     "MISTRAL_API_KEY": "6sifzrZW9g1mEeijbUFMUVdl4KoIVScg"
-  },
-  "talk": {
-    "provider": "mistral",
-    "providers": {
-      "mistral": {
-        "apiKey": "6sifzrZW9g1mEeijbUFMUVdl4KoIVScg",
-        "baseUrl": "https://api.mistral.ai/v1"
-      }
-    },
-    "realtime": {
-      "provider": "mistral",
-      "providers": {
-        "mistral": {
-          "apiKey": "6sifzrZW9g1mEeijbUFMUVdl4KoIVScg",
-          "baseUrl": "https://api.mistral.ai/v1"
-        }
-      }
-    }
   }
 }
